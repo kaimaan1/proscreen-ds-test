@@ -157,6 +157,7 @@ html, body {
   //   { type: 'video',            name: '...', src: 'assets/video.mp4' }
   //   { type: 'canvas',           name: '...', render: function(ctx, w, h) { ... } }
   //   { type: 'canvas-animation', name: '...', render: function(ctx, w, h, t) { ... } }
+  //   { type: 'iframe',           name: '...', src: 'https://example.com/html5-content' }
   //
   var PLAYLIST = [
     {
@@ -235,6 +236,11 @@ html, body {
       type: 'video',
       name: 'Testivideo (MP4)',
       src: 'test-video.mp4'
+    },
+    {
+      type: 'iframe',
+      name: 'Dynaaminen HTML5-aineisto',
+      src: 'https://ksml.cdn.mediapocket.fi/5ll3yKtClk0LsGajl7eq/5ll3yKtClk0LsGajl7eq-original'
     },
     {
       type: 'canvas-animation',
@@ -331,7 +337,7 @@ html, body {
       var slide = PLAYLIST[i];
       var div = document.createElement('div');
       div.className = 'slide';
-      var se = { el: div, animFrameId: null, canvas: null, ctx: null, img: null, video: null };
+      var se = { el: div, animFrameId: null, canvas: null, ctx: null, img: null, video: null, iframe: null };
 
       if (slide.type === 'image') {
         // Image slide with fallback canvas behind it
@@ -354,6 +360,28 @@ html, body {
         };
         div.appendChild(img);
         se.img = img;
+
+      } else if (slide.type === 'iframe') {
+        // iframe slide for dynamic HTML5 content
+        var canvas = document.createElement('canvas');
+        canvas.width = 1920;
+        canvas.height = 1080;
+        var ctx = canvas.getContext('2d');
+        renderFallbackCanvas(ctx, 1920, 1080, slide.name);
+        div.appendChild(canvas);
+        se.canvas = canvas;
+        se.ctx = ctx;
+
+        var iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;';
+        iframe.setAttribute('allowfullscreen', '');
+        iframe.setAttribute('allow', 'autoplay; encrypted-media');
+        iframe.src = slide.src;
+        iframe.onerror = function() {
+          this.style.display = 'none';
+        };
+        div.appendChild(iframe);
+        se.iframe = iframe;
 
       } else if (slide.type === 'video') {
         // Video slide with fallback canvas behind it
