@@ -161,6 +161,21 @@ html, body {
   //
   var PLAYLIST = [
     {
+      type: 'image',
+      name: 'Testikuva (JPG)',
+      src: 'test-image.jpg'
+    },
+    {
+      type: 'video',
+      name: 'Testivideo (MP4)',
+      src: 'test-video.mp4'
+    },
+    {
+      type: 'iframe',
+      name: 'Dynaaminen HTML5-aineisto',
+      src: 'https://ksml.cdn.mediapocket.fi/5ll3yKtClk0LsGajl7eq/5ll3yKtClk0LsGajl7eq-original'
+    },
+    {
       type: 'canvas',
       name: 'Värigradi',
       render: function(ctx, w, h) {
@@ -204,21 +219,6 @@ html, body {
         ctx.font = '14px Arial';
         ctx.fillText('Harmaasävy 0–255', w / 2, h - 90);
       }
-    },
-    {
-      type: 'image',
-      name: 'Testikuva (JPG)',
-      src: 'test-image.jpg'
-    },
-    {
-      type: 'video',
-      name: 'Testivideo (MP4)',
-      src: 'test-video.mp4'
-    },
-    {
-      type: 'iframe',
-      name: 'Dynaaminen HTML5-aineisto',
-      src: 'https://ksml.cdn.mediapocket.fi/5ll3yKtClk0LsGajl7eq/5ll3yKtClk0LsGajl7eq-original'
     },
     {
       type: 'canvas-animation',
