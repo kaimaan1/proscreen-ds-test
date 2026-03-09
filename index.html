@@ -211,28 +211,6 @@ html, body {
       src: 'test-image.jpg'
     },
     {
-      type: 'canvas',
-      name: 'Slot 3 Placeholder',
-      render: function(ctx, w, h) {
-        ctx.fillStyle = '#0f3460';
-        ctx.fillRect(0, 0, w, h);
-        ctx.strokeStyle = '#e94560';
-        ctx.lineWidth = 8;
-        ctx.strokeRect(40, 40, w - 80, h - 80);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 64px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('PROSCREEN TEST', w / 2, h / 2 - 50);
-        ctx.font = 'bold 48px Arial';
-        ctx.fillStyle = '#e94560';
-        ctx.fillText('— Slot 3 —', w / 2, h / 2 + 40);
-        ctx.font = '24px Arial';
-        ctx.fillStyle = 'rgba(255,255,255,0.6)';
-        ctx.fillText('BrightSign HTML5 Validointi', w / 2, h / 2 + 110);
-      }
-    },
-    {
       type: 'video',
       name: 'Testivideo (MP4)',
       src: 'test-video.mp4'
