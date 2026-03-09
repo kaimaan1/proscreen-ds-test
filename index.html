@@ -664,6 +664,19 @@ html, body {
     }, 5000);
   };
 
+  // ─── Listen for iframe skip requests ────────────────────────
+  window.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'proscreen-skip-slide') {
+      // iframe requested skip — advance to next slide immediately
+      if (timerHandle) {
+        clearTimeout(timerHandle);
+        timerHandle = null;
+      }
+      nextSlide();
+      schedulNext();
+    }
+  });
+
   // ─── Init ───────────────────────────────────────────────────
   function init() {
     try {
