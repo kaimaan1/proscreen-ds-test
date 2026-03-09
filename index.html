@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proscreen DS — BrightSign Test</title>
+<style>
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+  font-family: Arial, Helvetica, sans-serif;
+  cursor: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+#stage {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.slide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  transition: opacity 0.6s ease-in-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.slide.active {
+  opacity: 1;
+}
+
+.slide canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.slide video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Diagnostics overlay */
+#diagnostics {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #0f0;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 12px 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  z-index: 9999;
+  display: none;
+  min-width: 320px;
+}
+
+#diagnostics.visible {
+  display: block;
+}
+
+#diagnostics dt {
+  color: #0a0;
+  float: left;
+  clear: left;
+  width: 170px;
+}
+
+#diagnostics dd {
+  margin-left: 175px;
+  color: #0f0;
+}
+
+/* Fallback / error screen */
+#fallback {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+#fallback.visible {
+  opacity: 1;
+}
+
+#fallback span {
+  color: #fff;
+  font-size: 48px;
+  font-weight: bold;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+}
+</style>
+</head>
+<body>
+
+<div id="stage"></div>
+
+<div id="fallback">
+  <span>PROSCREEN</span>
+</div>
+
+<div id="diagnostics">
+  <dl>
+    <dt>Uptime:</dt><dd id="d-uptime">—</dd>
+    <dt>Luuppikierrokset:</dt><dd id="d-loops">0</dd>
+    <dt>Aika:</dt><dd id="d-time">—</dd>
+    <dt>Muisti (MB):</dt><dd id="d-memory">—</dd>
+    <dt>Viim. vaihto:</dt><dd id="d-lastswitch">—</dd>
+    <dt>Nykyinen slot:</dt><dd id="d-current">—</dd>
+  </dl>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ─── Configuration ───────────────────────────────────────────
+  var SLIDE_DURATION = 6000;       // 6 seconds per slide
+  var FADE_DURATION  = 600;        // CSS transition duration in ms
+  var RELOAD_HOUR    = 3;          // Auto-reload at 03:00
+  var MAX_UPTIME_MS  = 24 * 60 * 60 * 1000; // 24h safety net
+
+  // ─── State ───────────────────────────────────────────────────
+  var startTime       = Date.now();
+  var loopCount       = 0;
+  var currentIndex    = -1;
+  var lastSwitchTime  = null;
+  var slides          = [];
+  var slideElements   = [];
+  var timerHandle     = null;
+  var diagInterval    = null;
+  var reloadScheduled = false;
+
+  // ─── Debug mode via URL param ────────────────────────────────
+  var params    = new URLSearchParams(window.location.search);
+  var debugMode = params.get('debug') === 'true';
+  var diagEl    = document.getElementById('diagnostics');
+  if (debugMode) {
+    diagEl.classList.add('visible');
+  }
+
+  // ─── Slide definitions ──────────────────────────────────────
+  // Each slide has a type ('canvas' or 'video') and a render/src.
+  slides = [
+    {
+      type: 'canvas',
+      name: 'Värigradi',
+      render: function(ctx, w, h) {
+        var grad = ctx.createLinearGradient(0, 0, w, h);
+        grad.addColorStop(0, '#ff0000');
+        grad.addColorStop(0.17, '#ff8800');
+        grad.addColorStop(0.33, '#ffff00');
+        grad.addColorStop(0.5, '#00ff00');
+        grad.addColorStop(0.67, '#0088ff');
+        grad.addColorStop(0.83, '#8800ff');
+        grad.addColorStop(1, '#ff00ff');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, h);
+        // Add test text
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 36px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('PROSCREEN TEST — Värigradi', w / 2, h / 2);
+        ctx.font = '20px Arial';
+        ctx.fillText('Renderöintitesti: RGB-gradientti', w / 2, h / 2 + 50);
+      }
+    },
+    {
+      type: 'canvas',
+      name: 'Kontrasti',
+      render: function(ctx, w, h) {
+        // Black background with white text — contrast test
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, w, h);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 72px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('PROSCREEN', w / 2, h / 2 - 60);
+        ctx.font = '36px Arial';
+        ctx.fillText('Kontrastitesti — Valkoinen / Musta', w / 2, h / 2 + 30);
+        // Grayscale strip at bottom
+        for (var i = 0; i < 16; i++) {
+          var gray = Math.round((i / 15) * 255);
+          ctx.fillStyle = 'rgb(' + gray + ',' + gray + ',' + gray + ')';
+          ctx.fillRect((w / 16) * i, h - 80, w / 16, 60);
+        }
+        ctx.fillStyle = '#888';
+        ctx.font = '14px Arial';
+        ctx.fillText('Harmaasävy 0–255', w / 2, h - 90);
+      }
+    },
+    {
+      type: 'canvas',
+      name: 'Slot 3 Placeholder',
+      render: function(ctx, w, h) {
+        // Proscreen brand placeholder
+        ctx.fillStyle = '#0f3460';
+        ctx.fillRect(0, 0, w, h);
+        // Border frame
+        ctx.strokeStyle = '#e94560';
+        ctx.lineWidth = 8;
+        ctx.strokeRect(40, 40, w - 80, h - 80);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 64px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('PROSCREEN TEST', w / 2, h / 2 - 50);
+        ctx.font = 'bold 48px Arial';
+        ctx.fillStyle = '#e94560';
+        ctx.fillText('— Slot 3 —', w / 2, h / 2 + 40);
+        ctx.font = '24px Arial';
+        ctx.fillStyle = 'rgba(255,255,255,0.6)';
+        ctx.fillText('BrightSign HTML5 Validointi', w / 2, h / 2 + 110);
+      }
+    },
+    {
+      type: 'canvas-animation',
+      name: 'Animaatio 1 — Liikkuva palkki',
+      render: function(ctx, w, h, t) {
+        // Moving bars animation — simulates video content
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, w, h);
+        var barCount = 8;
+        var barH = h / barCount;
+        for (var i = 0; i < barCount; i++) {
+          var hue = ((t / 20) + i * 45) % 360;
+          var offset = Math.sin((t / 1000) + i * 0.8) * (w * 0.3);
+          ctx.fillStyle = 'hsl(' + hue + ', 80%, 50%)';
+          ctx.fillRect(w / 2 - 200 + offset, i * barH + 4, 400, barH - 8);
+        }
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 28px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('ANIMAATIOTESTI 1 — Liikkuva grafiikka', w / 2, 50);
+      }
+    },
+    {
+      type: 'canvas-animation',
+      name: 'Animaatio 2 — Pyörivät ympyrät',
+      render: function(ctx, w, h, t) {
+        // Rotating circles — second animation test
+        ctx.fillStyle = '#1a0a2e';
+        ctx.fillRect(0, 0, w, h);
+        var cx = w / 2;
+        var cy = h / 2;
+        var count = 12;
+        for (var i = 0; i < count; i++) {
+          var angle = (i / count) * Math.PI * 2 + t / 1500;
+          var radius = 180 + Math.sin(t / 800 + i) * 40;
+          var x = cx + Math.cos(angle) * radius;
+          var y = cy + Math.sin(angle) * radius;
+          var size = 30 + Math.sin(t / 600 + i * 0.5) * 15;
+          var hue = (i / count) * 360;
+          ctx.beginPath();
+          ctx.arc(x, y, size, 0, Math.PI * 2);
+          ctx.fillStyle = 'hsl(' + hue + ', 90%, 60%)';
+          ctx.fill();
+        }
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 28px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('ANIMAATIOTESTI 2 — Pyörivät elementit', cx, 50);
+        ctx.font = '20px Arial';
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillText('Canvas requestAnimationFrame', cx, h - 40);
+      }
+    }
+  ];
+
+  // ─── DOM Setup ──────────────────────────────────────────────
+  var stage = document.getElementById('stage');
+
+  function createSlideElements() {
+    for (var i = 0; i < slides.length; i++) {
+      var slide = slides[i];
+      var div = document.createElement('div');
+      div.className = 'slide';
+      var canvas = document.createElement('canvas');
+      canvas.width = 1920;
+      canvas.height = 1080;
+      div.appendChild(canvas);
+      stage.appendChild(div);
+      slideElements.push({
+        el: div,
+        canvas: canvas,
+        ctx: canvas.getContext('2d'),
+        animFrameId: null
+      });
+      // Pre-render static slides immediately
+      if (slide.type === 'canvas') {
+        slide.render(
+          slideElements[i].ctx,
+          canvas.width,
+          canvas.height
+        );
+      }
+    }
+  }
+
+  // ─── Animation loop for animated canvases ───────────────────
+  function startAnimation(index) {
+    var se = slideElements[index];
+    var slide = slides[index];
+    if (slide.type !== 'canvas-animation') return;
+    var startT = performance.now();
+    function frame() {
+      var t = performance.now() - startT;
+      slide.render(se.ctx, se.canvas.width, se.canvas.height, t);
+      se.animFrameId = requestAnimationFrame(frame);
+    }
+    se.animFrameId = requestAnimationFrame(frame);
+  }
+
+  function stopAnimation(index) {
+    var se = slideElements[index];
+    if (se.animFrameId !== null) {
+      cancelAnimationFrame(se.animFrameId);
+      se.animFrameId = null;
+    }
+  }
+
+  // ─── Slide advancement ──────────────────────────────────────
+  function showSlide(index) {
+    // Stop animation on previous slide
+    if (currentIndex >= 0) {
+      slideElements[currentIndex].el.classList.remove('active');
+      stopAnimation(currentIndex);
+    }
+
+    currentIndex = index;
+    lastSwitchTime = new Date();
+
+    // Start animation if needed
+    startAnimation(index);
+    slideElements[index].el.classList.add('active');
+
+    // Track loop count
+    if (index === 0 && loopCount >= 0) {
+      if (loopCount > 0 || currentIndex !== -1) {
+        loopCount++;
+      }
+    }
+  }
+
+  function nextSlide() {
+    var next = (currentIndex + 1) % slides.length;
+    if (next === 0 && currentIndex >= 0) {
+      loopCount++;
+    }
+    showSlide(next);
+  }
+
+  function startLoop() {
+    showSlide(0);
+    timerHandle = setInterval(nextSlide, SLIDE_DURATION);
+  }
+
+  // ─── Diagnostics update ─────────────────────────────────────
+  function formatUptime(ms) {
+    var s = Math.floor(ms / 1000);
+    var d = Math.floor(s / 86400);
+    s %= 86400;
+    var h = Math.floor(s / 3600);
+    s %= 3600;
+    var m = Math.floor(s / 60);
+    s %= 60;
+    var parts = [];
+    if (d > 0) parts.push(d + 'pv');
+    parts.push(h + 'h');
+    parts.push(m + 'min');
+    parts.push(s + 's');
+    return parts.join(' ');
+  }
+
+  function updateDiagnostics() {
+    if (!debugMode) return;
+    var now = Date.now();
+    document.getElementById('d-uptime').textContent = formatUptime(now - startTime);
+    document.getElementById('d-loops').textContent = loopCount;
+    document.getElementById('d-time').textContent = new Date().toLocaleString('fi-FI');
+    document.getElementById('d-current').textContent =
+      currentIndex >= 0 ? (currentIndex + 1) + '/' + slides.length + ' — ' + slides[currentIndex].name : '—';
+    document.getElementById('d-lastswitch').textContent =
+      lastSwitchTime ? lastSwitchTime.toLocaleTimeString('fi-FI') : '—';
+
+    // Memory (Chrome/Chromium only)
+    if (window.performance && performance.memory) {
+      var used = (performance.memory.usedJSHeapSize / 1048576).toFixed(1);
+      var total = (performance.memory.totalJSHeapSize / 1048576).toFixed(1);
+      document.getElementById('d-memory').textContent = used + ' / ' + total;
+    } else {
+      document.getElementById('d-memory').textContent = 'ei saatavilla';
+    }
+  }
+
+  // ─── Auto-reload at 03:00 ───────────────────────────────────
+  function checkAutoReload() {
+    if (reloadScheduled) return;
+    var now = new Date();
+    var uptimeMs = Date.now() - startTime;
+    // Only reload if uptime > 4 hours (avoid reload loops)
+    if (uptimeMs < 4 * 60 * 60 * 1000) return;
+    if (now.getHours() === RELOAD_HOUR && now.getMinutes() < 2) {
+      reloadScheduled = true;
+      // Fade to black, then reload
+      document.body.style.transition = 'opacity 1s';
+      document.body.style.opacity = '0';
+      setTimeout(function() {
+        window.location.reload();
+      }, 1500);
+    }
+  }
+
+  // ─── Error boundary ─────────────────────────────────────────
+  var fallbackEl = document.getElementById('fallback');
+
+  function showFallback() {
+    fallbackEl.classList.add('visible');
+  }
+
+  function hideFallback() {
+    fallbackEl.classList.remove('visible');
+  }
+
+  window.onerror = function(msg, src, line, col, err) {
+    showFallback();
+    // Attempt recovery after 5 seconds
+    setTimeout(function() {
+      try {
+        hideFallback();
+        if (!timerHandle) {
+          startLoop();
+        }
+      } catch (e) {
+        // Last resort: reload
+        window.location.reload();
+      }
+    }, 5000);
+    return true; // Prevent default error handling
+  };
+
+  window.onunhandledrejection = function(event) {
+    event.preventDefault();
+    showFallback();
+    setTimeout(function() {
+      hideFallback();
+    }, 5000);
+  };
+
+  // ─── Init ───────────────────────────────────────────────────
+  function init() {
+    try {
+      createSlideElements();
+      startLoop();
+
+      if (debugMode) {
+        updateDiagnostics();
+        diagInterval = setInterval(updateDiagnostics, 1000);
+      }
+
+      // Check auto-reload every 30 seconds
+      setInterval(checkAutoReload, 30000);
+
+    } catch (e) {
+      showFallback();
+      // Try to recover
+      setTimeout(function() {
+        window.location.reload();
+      }, 10000);
+    }
+  }
+
+  // Start when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+})();
+</script>
+</body>
+</html>
