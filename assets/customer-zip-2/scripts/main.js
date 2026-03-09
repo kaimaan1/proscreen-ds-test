@@ -83,7 +83,10 @@ function exitAd(){
 function playVideo(){
 	if(!preloadComplete) return;
 	setLastAlertId(alertID);
-	if(videoEl) videoEl.play();
+	if(videoEl){
+		videoEl.style.visibility = 'visible';
+		videoEl.play();
+	}
 	console.log("video play: "+videoEl.src);
 }
 
