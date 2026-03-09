@@ -160,6 +160,8 @@ html, body {
   //   { type: 'canvas-animation', name: '...', render: function(ctx, w, h, t) { ... } }
   //   { type: 'iframe',           name: '...', src: 'https://example.com/html5-content' }
   //
+  // Per-slide duration: lisää 'duration' (ms) ylikirjoittaaksesi SLIDE_DURATION.
+  //
   var PLAYLIST = [
     {
       type: 'image',
@@ -173,7 +175,13 @@ html, body {
     },
     {
       type: 'iframe',
-      name: 'Dynaaminen HTML5-aineisto',
+      name: 'ZIP PACKAGE TEST',
+      src: 'assets/test-dynamic/index.html',
+      duration: 15000
+    },
+    {
+      type: 'iframe',
+      name: 'Web Redirect — Mediapocket',
       src: 'https://ksml.cdn.mediapocket.fi/5ll3yKtClk0LsGajl7eq/5ll3yKtClk0LsGajl7eq-original'
     },
     {
@@ -345,7 +353,7 @@ html, body {
         se.img = img;
 
       } else if (slide.type === 'iframe') {
-        // iframe slide for dynamic HTML5 content
+        // iframe slide — iframe luodaan dynaamisesti aktivoinnissa (muistinhallinta)
         var canvas = document.createElement('canvas');
         canvas.width = 1920;
         canvas.height = 1080;
@@ -355,22 +363,9 @@ html, body {
         div.appendChild(canvas);
         se.canvas = canvas;
         se.ctx = ctx;
-
-        var iframe = document.createElement('iframe');
-        iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;background:transparent;';
-        iframe.setAttribute('allowfullscreen', '');
-        iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; accelerometer; gyroscope; picture-in-picture; web-share');
-        iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
-        iframe.setAttribute('loading', 'eager');
-        iframe.onerror = (function(cx, name, iframeEl) {
-          return function() {
-            renderFallbackCanvas(cx, 1920, 1080, name + ' (latausvirhe)');
-            iframeEl.style.display = 'none';
-          };
-        })(ctx, slide.name, iframe);
-        iframe.src = slide.src;
-        div.appendChild(iframe);
-        se.iframe = iframe;
+        se.iframeSrc = slide.src;
+        se.iframeName = slide.name;
+        se.iframe = null;
 
       } else if (slide.type === 'video') {
         // Video slide with fallback canvas behind it
@@ -464,6 +459,43 @@ html, body {
   }
 
   // ─── Video play/pause management ────────────────────────────
+  function createIframe(se) {
+    var iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;background:transparent;';
+    iframe.setAttribute('allowfullscreen', '');
+    iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; accelerometer; gyroscope; picture-in-picture; web-share');
+    iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+    iframe.setAttribute('loading', 'eager');
+    iframe.onerror = (function(cx, name, iframeEl) {
+      return function() {
+        renderFallbackCanvas(cx, 1920, 1080, name + ' (latausvirhe)');
+        iframeEl.style.display = 'none';
+      };
+    })(se.ctx, se.iframeName, iframe);
+    iframe.src = se.iframeSrc;
+    se.el.appendChild(iframe);
+    se.iframe = iframe;
+
+    // Kutsu ProscreenPlay() iframe-sisällölle kun se on latautunut
+    iframe.addEventListener('load', function() {
+      try {
+        if (iframe.contentWindow && typeof iframe.contentWindow.ProscreenPlay === 'function') {
+          iframe.contentWindow.ProscreenPlay();
+        }
+      } catch (e) {
+        // Cross-origin — ei voi kutsua, sisältö käynnistää itse
+      }
+    });
+  }
+
+  function destroyIframe(se) {
+    if (se.iframe) {
+      se.iframe.src = 'about:blank';
+      se.el.removeChild(se.iframe);
+      se.iframe = null;
+    }
+  }
+
   function activateSlideMedia(index) {
     var se = slideElements[index];
     var slide = PLAYLIST[index];
@@ -476,6 +508,9 @@ html, body {
         se.video.play().catch(function() {});
       } catch (e) {}
     }
+    if (slide.type === 'iframe' && se.iframeSrc) {
+      createIframe(se);
+    }
     if (slide.type === 'canvas-animation') {
       startAnimation(index);
     }
@@ -486,6 +521,9 @@ html, body {
     var slide = PLAYLIST[index];
     if (slide.type === 'video' && se.video) {
       try { se.video.pause(); } catch (e) {}
+    }
+    if (slide.type === 'iframe') {
+      destroyIframe(se);
     }
     if (slide.type === 'canvas-animation') {
       stopAnimation(index);
@@ -514,9 +552,17 @@ html, body {
     showSlide(next);
   }
 
+  function schedulNext() {
+    var dur = (PLAYLIST[currentIndex] && PLAYLIST[currentIndex].duration) || SLIDE_DURATION;
+    timerHandle = setTimeout(function() {
+      nextSlide();
+      schedulNext();
+    }, dur);
+  }
+
   function startLoop() {
     showSlide(0);
-    timerHandle = setInterval(nextSlide, SLIDE_DURATION);
+    schedulNext();
   }
 
   // ─── Diagnostics update ─────────────────────────────────────

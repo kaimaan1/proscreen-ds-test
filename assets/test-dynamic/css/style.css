@@ -1,0 +1,191 @@
+/* Proscreen HTML5 ZIP Test — Styles */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1a0a2e;
+  font-family: Arial, Helvetica, sans-serif;
+  color: #fff;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ─── Layout ─────────────────────────────────────── */
+.container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 1fr 1fr;
+}
+
+/* ─── Header: Clock + Weather ────────────────────── */
+.header {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 30px 50px 20px;
+  background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+  z-index: 2;
+}
+
+.clock {
+  font-size: 54px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+}
+
+.clock-date {
+  font-size: 28px;
+  font-weight: normal;
+  opacity: 0.8;
+  margin-top: 4px;
+}
+
+.weather {
+  text-align: right;
+  min-width: 280px;
+}
+
+.weather-temp {
+  font-size: 48px;
+  font-weight: bold;
+}
+
+.weather-desc {
+  font-size: 22px;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+.weather-icon {
+  width: 64px;
+  height: 64px;
+  vertical-align: middle;
+}
+
+.weather-offline {
+  font-size: 18px;
+  opacity: 0.5;
+  font-style: italic;
+}
+
+/* ─── Video area ─────────────────────────────────── */
+.video-area {
+  grid-column: 1 / -1;
+  position: relative;
+  overflow: hidden;
+}
+
+.video-area video,
+.video-area canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ─── Scrolling ticker ───────────────────────────── */
+.ticker-bar {
+  grid-column: 1 / -1;
+  background: linear-gradient(90deg, #6c2bd9, #e94560, #6c2bd9);
+  background-size: 200% 100%;
+  padding: 14px 0;
+  overflow: hidden;
+  white-space: nowrap;
+  z-index: 2;
+}
+
+.ticker-text {
+  display: inline-block;
+  font-size: 24px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  animation: ticker-scroll 20s linear infinite;
+  padding-left: 100%;
+}
+
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-100%); }
+}
+
+/* ─── CSS animation test: pulsing corners ────────── */
+.pulse-corner {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  opacity: 0.6;
+  animation: pulse 2s ease-in-out infinite;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.pulse-corner.tl { top: 20px; left: 20px; background: #ff6b6b; animation-delay: 0s; }
+.pulse-corner.tr { top: 20px; right: 20px; background: #51cf66; animation-delay: 0.5s; }
+.pulse-corner.bl { bottom: 80px; left: 20px; background: #339af0; animation-delay: 1s; }
+.pulse-corner.br { bottom: 80px; right: 20px; background: #fcc419; animation-delay: 1.5s; }
+
+@keyframes pulse {
+  0%, 100% { transform: scale(0.6); opacity: 0.3; }
+  50%      { transform: scale(1.2); opacity: 0.8; }
+}
+
+/* ─── Diagnostics overlay ────────────────────────── */
+.diag-overlay {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #0f0;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  z-index: 9999;
+  max-width: 420px;
+}
+
+.diag-overlay .diag-title {
+  font-size: 14px;
+  font-weight: bold;
+  color: #0f0;
+  margin-bottom: 6px;
+  letter-spacing: 2px;
+}
+
+.diag-overlay .diag-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.diag-overlay .diag-label {
+  color: #0a0;
+  flex-shrink: 0;
+}
+
+.diag-overlay .diag-value {
+  color: #0f0;
+  text-align: right;
+  word-break: break-all;
+}
+
+.diag-ok { color: #0f0 !important; }
+.diag-fail { color: #f44 !important; }
