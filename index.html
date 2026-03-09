@@ -54,7 +54,7 @@ html, body {
 .slide video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
@@ -329,7 +329,7 @@ html, body {
         se.ctx = ctx;
 
         var img = new Image();
-        img.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;';
+        img.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;';
         img.alt = slide.name;
         img.src = slide.src;
         img.onerror = function() {
@@ -373,7 +373,7 @@ html, body {
         se.ctx = ctx;
 
         var video = document.createElement('video');
-        video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;';
+        video.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;';
         video.muted = true;
         video.autoplay = false; // We control play/pause manually
         video.playsInline = true;
