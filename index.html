@@ -323,7 +323,9 @@ html, body {
         canvas.width = 1920;
         canvas.height = 1080;
         var ctx = canvas.getContext('2d');
-        renderFallbackCanvas(ctx, 1920, 1080, slide.name);
+        // Start with black canvas; show fallback only on error
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, 1920, 1080);
         div.appendChild(canvas);
         se.canvas = canvas;
         se.ctx = ctx;
@@ -332,10 +334,12 @@ html, body {
         img.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;';
         img.alt = slide.name;
         img.src = slide.src;
-        img.onerror = function() {
-          // Fallback canvas already visible behind
-          this.style.display = 'none';
-        };
+        img.onerror = (function(c, cx, name) {
+          return function() {
+            renderFallbackCanvas(cx, 1920, 1080, name);
+            this.style.display = 'none';
+          };
+        })(canvas, ctx, slide.name);
         div.appendChild(img);
         se.img = img;
 
@@ -345,7 +349,8 @@ html, body {
         canvas.width = 1920;
         canvas.height = 1080;
         var ctx = canvas.getContext('2d');
-        renderFallbackCanvas(ctx, 1920, 1080, slide.name);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, 1920, 1080);
         div.appendChild(canvas);
         se.canvas = canvas;
         se.ctx = ctx;
@@ -355,9 +360,12 @@ html, body {
         iframe.setAttribute('allowfullscreen', '');
         iframe.setAttribute('allow', 'autoplay; encrypted-media');
         iframe.src = slide.src;
-        iframe.onerror = function() {
-          this.style.display = 'none';
-        };
+        iframe.onerror = (function(cx, name) {
+          return function() {
+            renderFallbackCanvas(cx, 1920, 1080, name);
+            this.style.display = 'none';
+          };
+        })(ctx, slide.name);
         div.appendChild(iframe);
         se.iframe = iframe;
 
@@ -367,7 +375,8 @@ html, body {
         canvas.width = 1920;
         canvas.height = 1080;
         var ctx = canvas.getContext('2d');
-        renderFallbackCanvas(ctx, 1920, 1080, slide.name);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, 1920, 1080);
         div.appendChild(canvas);
         se.canvas = canvas;
         se.ctx = ctx;
@@ -381,9 +390,12 @@ html, body {
         video.preload = 'auto';
         video.loop = true;
         video.src = slide.src;
-        video.onerror = function() {
-          this.style.display = 'none';
-        };
+        video.onerror = (function(cx, name) {
+          return function() {
+            renderFallbackCanvas(cx, 1920, 1080, name);
+            this.style.display = 'none';
+          };
+        })(ctx, slide.name);
         div.appendChild(video);
         se.video = video;
 
