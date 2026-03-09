@@ -206,44 +206,6 @@
     placeholderAnimId = requestAnimationFrame(frame);
   }
 
-  // ─── Diagnostics ─────────────────────────────────────────────
-  function updateDiagnostics() {
-    var uptimeMs = Date.now() - startTime;
-    var uptimeS = Math.floor(uptimeMs / 1000);
-    var m = Math.floor(uptimeS / 60);
-    var s = uptimeS % 60;
-    var uptimeStr = m + 'min ' + s + 's';
-
-    setDiag('diag-uptime', uptimeStr);
-    setDiag('diag-ua', navigator.userAgent.substring(0, 80));
-
-    // Memory
-    if (window.performance && performance.memory) {
-      var used = (performance.memory.usedJSHeapSize / 1048576).toFixed(1);
-      var total = (performance.memory.totalJSHeapSize / 1048576).toFixed(1);
-      setDiag('diag-memory', used + ' / ' + total + ' MB');
-    } else {
-      setDiag('diag-memory', 'ei saatavilla');
-    }
-
-    // Weather status
-    var ws = weatherState.status;
-    var wsEl = document.getElementById('diag-weather');
-    if (wsEl) {
-      var wsText = ws === 'ok' ? 'OK' : ws === 'no-key' ? 'EI AVAINTA' : ws === 'pending' ? 'ODOTTAA' : 'FAIL';
-      if (weatherState.lastFetch) {
-        wsText += ' (' + weatherState.lastFetch.toLocaleTimeString('fi-FI') + ')';
-      }
-      wsEl.textContent = wsText;
-      wsEl.className = 'diag-value ' + (ws === 'ok' ? 'diag-ok' : ws === 'fail' ? 'diag-fail' : '');
-    }
-  }
-
-  function setDiag(id, text) {
-    var el = document.getElementById(id);
-    if (el) el.textContent = text;
-  }
-
   // ─── ProscreenPlay() callback ────────────────────────────────
   var started = false;
 
@@ -268,9 +230,6 @@
       videoEl.play().catch(function() {});
     }
 
-    // Diagnostics — update every 2s
-    updateDiagnostics();
-    setInterval(updateDiagnostics, 2000);
   }
 
   // Export ProscreenPlay globally
