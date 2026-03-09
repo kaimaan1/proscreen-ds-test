@@ -15,7 +15,8 @@ Tämä **ei ole** varsinainen digital signage -sovellus. Tämä on puhdas teknin
 
 | Ominaisuus | Kuvaus |
 |---|---|
-| **5 testislotia** | Värigradi, kontrasti, placeholder, 2× Canvas-animaatio |
+| **7 testislotia** | Värigradi, kontrasti, testikuva, placeholder, testivideo, 2× Canvas-animaatio |
+| **Kuva/videotuki** | JPG/PNG-kuvat ja MP4-videot `assets/`-kansiosta |
 | **6s sykli** | Jokainen sisältö näkyy 6 sekuntia |
 | **Fade-siirtymä** | 0.6s CSS opacity transition |
 | **Diagnostiikka** | Uptime, luuppilaskuri, muistinkäyttö (`?debug=true`) |
@@ -25,21 +26,15 @@ Tämä **ei ole** varsinainen digital signage -sovellus. Tämä on puhdas teknin
 
 ## Käyttöönotto
 
-### 1. Deploy staattisena sivuna
+### 1. Deploy GitHub Pagesiin
 
-Tiedosto `index.html` toimii sellaisenaan millä tahansa staattisella hostingilla:
+Repo sisältää valmiin GitHub Actions -workflown (`.github/workflows/deploy.yml`).
 
-**Vercel:**
-```bash
-npx vercel --prod
-```
+1. Mene repo → **Settings** → **Pages** → Source: **GitHub Actions**
+2. Pushaa `main`-branchiin → deploy käynnistyy automaattisesti
+3. Sivusto löytyy osoitteesta: `https://<user>.github.io/<repo>/`
 
-**Netlify:**
-```bash
-npx netlify deploy --prod --dir=.
-```
-
-**Tai mikä tahansa HTTP-palvelin:**
+**Tai lokaali testaus:**
 ```bash
 python3 -m http.server 8080
 ```
@@ -78,11 +73,28 @@ Overlay näyttää:
 
 | # | Tyyppi | Sisältö | Testaa |
 |---|---|---|---|
-| 1 | Staattinen Canvas | RGB-värigradi + teksti | Värien renderöinti |
-| 2 | Staattinen Canvas | Valkoinen/musta + harmaasävypalkit | Kontrasti LED-näytöllä |
-| 3 | Staattinen Canvas | Proscreen-brändätty placeholder | Tekstin ja kehyksen piirto |
-| 4 | Canvas-animaatio | Liikkuvat väripalkit | requestAnimationFrame, sulavuus |
-| 5 | Canvas-animaatio | Pyörivät ympyrät | Jatkuva animaatio, suorituskyky |
+| 1 | Canvas | RGB-värigradi + teksti | Värien renderöinti |
+| 2 | Canvas | Valkoinen/musta + harmaasävypalkit | Kontrasti LED-näytöllä |
+| 3 | **Kuva (JPG)** | `assets/test-image.jpg` | Kuvan lataus verkosta, renderöinti |
+| 4 | Canvas | Proscreen-brändätty placeholder | Tekstin ja kehyksen piirto |
+| 5 | **Video (MP4)** | `assets/test-video.mp4` | Videon toisto, H.264-dekoodaus |
+| 6 | Canvas-animaatio | Liikkuvat väripalkit | requestAnimationFrame, sulavuus |
+| 7 | Canvas-animaatio | Pyörivät ympyrät | Jatkuva animaatio, suorituskyky |
+
+### Omien aineistojen lisääminen
+
+1. Lisää kuvat/videot `assets/`-kansioon (1920×1080, landscape)
+2. Muokkaa `index.html`-tiedoston `PLAYLIST`-taulukkoa:
+
+```javascript
+// Kuva:
+{ type: 'image', name: 'Mainoskuva', src: 'assets/mainos.jpg' }
+
+// Video:
+{ type: 'video', name: 'Promo', src: 'assets/promo.mp4' }
+```
+
+Jos tiedosto puuttuu, näytetään automaattisesti Proscreen-brändätty fallback.
 
 ## Hyväksymiskriteerit (2–4 viikon testi)
 
