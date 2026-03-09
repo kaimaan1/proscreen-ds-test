@@ -84,10 +84,12 @@ function playVideo(){
 	if(!preloadComplete) return;
 	setLastAlertId(alertID);
 	if(videoEl){
+		videoEl.preload = 'auto';
+		videoEl.load();
 		videoEl.style.visibility = 'visible';
 		videoEl.play();
 	}
-	console.log("video play: "+videoEl.src);
+	console.log("video play");
 }
 
 function BroadSignPlay(){
