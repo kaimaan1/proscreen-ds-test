@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Proscreen DS — BrightSign Test</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 <style>
 *, *::before, *::after {
   margin: 0;
@@ -391,13 +392,27 @@ html, body {
         video.setAttribute('playsinline', '');
         video.preload = 'auto';
         video.loop = true;
-        video.src = slide.src;
         video.onerror = (function(cx, name) {
           return function() {
             renderFallbackCanvas(cx, 1920, 1080, name);
             this.style.display = 'none';
           };
         })(ctx, slide.name);
+
+        // HLS stream support (.m3u8)
+        var isHLS = /\.m3u8($|\?)/.test(slide.src);
+        if (isHLS && typeof Hls !== 'undefined' && Hls.isSupported()) {
+          var hls = new Hls();
+          hls.loadSource(slide.src);
+          hls.attachMedia(video);
+          se.hls = hls;
+        } else if (isHLS && video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Native HLS (Safari / some BrightSign firmware)
+          video.src = slide.src;
+        } else {
+          video.src = slide.src;
+        }
+
         div.appendChild(video);
         se.video = video;
 
@@ -448,7 +463,10 @@ html, body {
     var slide = PLAYLIST[index];
     if (slide.type === 'video' && se.video) {
       try {
-        se.video.currentTime = 0;
+        var isHLS = /\.m3u8($|\?)/.test(slide.src);
+        if (!isHLS) {
+          se.video.currentTime = 0;
+        }
         se.video.play().catch(function() {});
       } catch (e) {}
     }
