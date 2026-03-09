@@ -358,53 +358,15 @@ html, body {
         var iframe = document.createElement('iframe');
         iframe.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;border:none;background:transparent;';
         iframe.setAttribute('allowfullscreen', '');
-        iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen');
-        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-forms allow-presentation');
+        iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; accelerometer; gyroscope; picture-in-picture; web-share');
         iframe.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
         iframe.setAttribute('loading', 'eager');
-
-        // Detect load failure with timeout since onerror is unreliable for iframes
-        var iframeLoaded = false;
-        iframe.onload = function() {
-          iframeLoaded = true;
-        };
         iframe.onerror = (function(cx, name, iframeEl) {
           return function() {
             renderFallbackCanvas(cx, 1920, 1080, name + ' (latausvirhe)');
             iframeEl.style.display = 'none';
           };
         })(ctx, slide.name, iframe);
-
-        // Timeout fallback: if iframe hasn't loaded in 10s, try fetch to check availability
-        (function(cx, name, iframeEl, src) {
-          setTimeout(function() {
-            if (!iframeLoaded) {
-              // Try HEAD request to check if URL is accessible
-              var xhr = new XMLHttpRequest();
-              xhr.open('HEAD', src, true);
-              xhr.timeout = 5000;
-              xhr.onload = function() {
-                if (xhr.status >= 400) {
-                  renderFallbackCanvas(cx, 1920, 1080, name + ' (HTTP ' + xhr.status + ')');
-                  iframeEl.style.display = 'none';
-                }
-              };
-              xhr.onerror = function() {
-                renderFallbackCanvas(cx, 1920, 1080, name + ' (ei saatavilla)');
-                iframeEl.style.display = 'none';
-              };
-              xhr.ontimeout = function() {
-                renderFallbackCanvas(cx, 1920, 1080, name + ' (aikakatkaisu)');
-                iframeEl.style.display = 'none';
-              };
-              try { xhr.send(); } catch(e) {
-                renderFallbackCanvas(cx, 1920, 1080, name + ' (ei saatavilla)');
-                iframeEl.style.display = 'none';
-              }
-            }
-          }, 10000);
-        })(ctx, slide.name, iframe, slide.src);
-
         iframe.src = slide.src;
         div.appendChild(iframe);
         se.iframe = iframe;
