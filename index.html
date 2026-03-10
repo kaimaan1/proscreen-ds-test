@@ -188,7 +188,8 @@ html, body {
     {
       type: 'iframe',
       name: 'Web Redirect — Mediapocket',
-      src: 'https://ksml.cdn.mediapocket.fi/5ll3yKtClk0LsGajl7eq/5ll3yKtClk0LsGajl7eq-original'
+      src: 'https://ksml.cdn.mediapocket.fi/5ll3yKtClk0LsGajl7eq/5ll3yKtClk0LsGajl7eq-original',
+      duration: 10000
     },
     {
       type: 'iframe',
@@ -398,7 +399,7 @@ html, body {
         video.playsInline = true;
         video.setAttribute('playsinline', '');
         video.preload = 'auto';
-        video.loop = true;
+        video.loop = false;
         video.onerror = (function(cx, name) {
           return function() {
             renderFallbackCanvas(cx, 1920, 1080, name);
