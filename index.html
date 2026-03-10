@@ -139,6 +139,8 @@ html, body {
     <dt>Muisti (MB):</dt><dd id="d-memory">—</dd>
     <dt>Viim. vaihto:</dt><dd id="d-lastswitch">—</dd>
     <dt>Nykyinen slot:</dt><dd id="d-current">—</dd>
+    <dt>Versio:</dt><dd id="d-version">—</dd>
+    <dt>Päivitys:</dt><dd id="d-update">—</dd>
   </dl>
 </div>
 
@@ -147,8 +149,12 @@ html, body {
   'use strict';
 
   // ─── Configuration ───────────────────────────────────────────
+  var VERSION        = '__BUILD_TIMESTAMP__';  // Replaced by CI; stays as-is in dev
   var SLIDE_DURATION = 6000;       // 6 seconds per slide
   var RELOAD_HOUR    = 3;          // Auto-reload at 03:00
+  var UPDATE_CHECK_INTERVAL = 2 * 60 * 1000;  // Check for new version every 2 min
+
+  window.PROSCREEN_VERSION = VERSION;
 
   // ─── Slide playlist ─────────────────────────────────────────
   // Muokkaa tätä taulukkoa lisätäksesi omia kuvia ja videoita.
@@ -304,9 +310,15 @@ html, body {
   var diagInterval    = null;
   var reloadScheduled = false;
 
+  // ─── Graceful update state ─────────────────────────────────
+  var updateInProgress = false;
+  var pendingUpdate    = false;
+  var preloadIframe    = null;
+
   // ─── Debug mode via URL param ────────────────────────────────
   var params    = new URLSearchParams(window.location.search);
   var debugMode = params.get('debug') === 'true';
+  var isPreloadCopy = params.get('noupdate') === 'true';
   var diagEl    = document.getElementById('diagnostics');
   if (debugMode) {
     diagEl.classList.add('visible');
@@ -332,6 +344,12 @@ html, body {
     ctx.fillText(name || 'Aineisto ei saatavilla', w / 2, h / 2 + 20);
   }
 
+  // ─── Cache-busting for local assets ────────────────────────
+  function bustCache(src) {
+    if (src.indexOf('://') !== -1) return src;
+    return src + (src.indexOf('?') === -1 ? '?' : '&') + '_v=' + VERSION;
+  }
+
   function createSlideElements() {
     for (var i = 0; i < PLAYLIST.length; i++) {
       var slide = PLAYLIST[i];
@@ -355,7 +373,7 @@ html, body {
         var img = new Image();
         img.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;';
         img.alt = slide.name;
-        img.src = slide.src;
+        img.src = bustCache(slide.src);
         img.onerror = (function(c, cx, name) {
           return function() {
             renderFallbackCanvas(cx, 1920, 1080, name);
@@ -419,12 +437,12 @@ html, body {
           se.hls = hls;
         } else if (isHLS && video.canPlayType('application/vnd.apple.mpegurl')) {
           // Native HLS (Safari / some BrightSign firmware)
-          video.src = slide.src;
+          video.src = bustCache(slide.src);
         } else {
           if (isHLS) {
             console.warn('[HLS] hls.js not available and no native HLS support — .m3u8 will not play');
           }
-          video.src = slide.src;
+          video.src = bustCache(slide.src);
         }
 
         div.appendChild(video);
@@ -485,7 +503,7 @@ html, body {
         iframeEl.style.display = 'none';
       };
     })(se.ctx, se.iframeName, iframe);
-    iframe.src = se.iframeSrc;
+    iframe.src = bustCache(se.iframeSrc);
     se.el.appendChild(iframe);
     se.iframe = iframe;
 
@@ -558,6 +576,11 @@ html, body {
   }
 
   function nextSlide() {
+    // If an update is pending, execute it during the slide transition
+    if (pendingUpdate && preloadIframe) {
+      executeUpdate();
+      return;
+    }
     var next = (currentIndex + 1) % PLAYLIST.length;
     if (next === 0 && currentIndex >= 0) {
       loopCount++;
@@ -613,22 +636,122 @@ html, body {
     } else {
       document.getElementById('d-memory').textContent = 'ei saatavilla';
     }
+
+    document.getElementById('d-version').textContent = VERSION;
+    document.getElementById('d-update').textContent =
+      updateInProgress ? 'Ladataan...' :
+      pendingUpdate ? 'Odottaa vaihtoa' :
+      'OK';
   }
 
   // ─── Auto-reload at 03:00 ───────────────────────────────────
   function checkAutoReload() {
-    if (reloadScheduled) return;
+    if (reloadScheduled || isPreloadCopy) return;
     var now = new Date();
     var uptimeMs = Date.now() - startTime;
     if (uptimeMs < 4 * 60 * 60 * 1000) return;
     if (now.getHours() === RELOAD_HOUR && now.getMinutes() < 2) {
       reloadScheduled = true;
-      document.body.style.transition = 'opacity 1s';
+      document.body.style.transition = 'opacity 0.8s ease-in-out';
       document.body.style.opacity = '0';
       setTimeout(function() {
-        window.location.reload();
-      }, 1500);
+        window.location.href = window.location.pathname + '?_r=' + Date.now();
+      }, 900);
     }
+  }
+
+  // ─── Graceful content update ────────────────────────────────
+  function fetchText(url, callback) {
+    if (typeof fetch !== 'undefined') {
+      fetch(url, { cache: 'no-store' })
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+        .then(function(text) { callback(null, text); })
+        .catch(function(err) { callback(err); });
+    } else {
+      var xhr = new XMLHttpRequest();
+      xhr.timeout = 15000;
+      xhr.onload = function() {
+        if (xhr.status === 200) callback(null, xhr.responseText);
+        else callback(new Error('HTTP ' + xhr.status));
+      };
+      xhr.onerror = function() { callback(new Error('Network error')); };
+      xhr.ontimeout = function() { callback(new Error('Timeout')); };
+      xhr.open('GET', url, true);
+      xhr.send();
+    }
+  }
+
+  function checkForUpdate() {
+    if (updateInProgress || isPreloadCopy) return;
+    // Don't check if VERSION is the raw placeholder (local dev)
+    if (VERSION === '__BUILD_TIMESTAMP__') return;
+
+    updateInProgress = true;
+    var url = window.location.pathname + '?_cb=' + Date.now();
+
+    fetchText(url, function(err, html) {
+      if (err) {
+        console.warn('[Update] Check failed:', err);
+        updateInProgress = false;
+        return;
+      }
+      var match = html.match(/var VERSION\s*=\s*'([^']+)'/);
+      if (match && match[1] && match[1] !== VERSION) {
+        console.log('[Update] New version detected: ' + match[1] + ' (current: ' + VERSION + ')');
+        prepareUpdate();
+      } else {
+        updateInProgress = false;
+      }
+    });
+  }
+
+  function prepareUpdate() {
+    preloadIframe = document.createElement('iframe');
+    preloadIframe.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;' +
+      'border:none;opacity:0;pointer-events:none;z-index:0;';
+    preloadIframe.src = window.location.pathname + '?_v=' + Date.now() + '&noupdate=true';
+
+    preloadIframe.onload = function() {
+      console.log('[Update] New version preloaded in iframe, scheduling transition');
+      scheduleTransition();
+    };
+
+    preloadIframe.onerror = function() {
+      console.warn('[Update] Preload failed');
+      cleanupPreloadIframe();
+      updateInProgress = false;
+    };
+
+    document.body.appendChild(preloadIframe);
+  }
+
+  function cleanupPreloadIframe() {
+    if (preloadIframe) {
+      preloadIframe.src = 'about:blank';
+      if (preloadIframe.parentNode) preloadIframe.parentNode.removeChild(preloadIframe);
+      preloadIframe = null;
+    }
+  }
+
+  function scheduleTransition() {
+    pendingUpdate = true;
+    // Safety: force transition after 2 minutes if no slide change occurs
+    setTimeout(function() {
+      if (pendingUpdate) executeUpdate();
+    }, 120000);
+  }
+
+  function executeUpdate() {
+    pendingUpdate = false;
+    cleanupPreloadIframe();
+
+    // Fade out to dark background, then reload with cache-busted URL
+    document.body.style.transition = 'opacity 0.8s ease-in-out';
+    document.body.style.opacity = '0';
+
+    setTimeout(function() {
+      window.location.href = window.location.pathname + '?_r=' + Date.now();
+    }, 900);
   }
 
   // ─── Error boundary ─────────────────────────────────────────
@@ -690,6 +813,12 @@ html, body {
       }
 
       setInterval(checkAutoReload, 30000);
+
+      // Graceful update checker (skip for preload copies)
+      if (!isPreloadCopy) {
+        setTimeout(checkForUpdate, 60000);  // First check after 60s
+        setInterval(checkForUpdate, UPDATE_CHECK_INTERVAL);
+      }
     } catch (e) {
       showFallback();
       setTimeout(function() {
