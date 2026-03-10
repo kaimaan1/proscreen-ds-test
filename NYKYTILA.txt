@@ -1,0 +1,216 @@
+PROSCREEN DS — SOVELLUKSEN NYKYTILA
+====================================
+Paeivaeys: 2026-03-10
+
+1. YLEISKUVAUS
+--------------
+HTML5-diaesityssovellus BrightSign LS424 -mediasoittimelle. Kaeytetaeaen
+digital signage -sisaelloen esittaemiseen LED-naeytoellae. Deployataan GitHub
+Pagesin kautta, laite lataa sisaelloen verkko-URL:sta.
+
+Paeaekaeytti: tekniikan validointi (renderoeinti, vakaus, muistinhallinta).
+Nykyisin myoes tuotantokaeytoessae asiakkaan ZIP-sisaelloillae.
+
+
+2. TIEDOSTORAKENNE
+------------------
+proscreen-ds-test/
+  index.html                  Paeaesovellus (839 riviä, inline CSS + JS)
+  test-image.jpg              Testikuva (slide 1)
+  test-video.mp4              Testivideo (slide 3)
+  build-zip.sh                Skripti test-dynamic.zip pakkaamiseen
+  test-dynamic.zip            Valmiiksi pakattu ZIP (generoitu)
+  README.md                   Alkuperaeinen README (osittain vanhentunut)
+  .gitignore                  *.zip
+  lib/
+    hls.min.js                HLS.js-kirjasto (.m3u8-striimaus)
+  assets/
+    customer-zip-1/           Unicef-mainos (aktiivinen, video toistuu)
+      index.html              Video-elementti + ProscreenPlay()-callback
+      css/style.css           Tyylitiedosto
+      scripts/main.js         Toistologiikka + BroadSignPlay/ProscreenPlay
+      video/Unicef_Alert_03_DOOH_20s.mp4
+    customer-zip-2/           Unicef-mainos (piilotettu, video ei toistu)
+      index.html              Video visibility:hidden, preload:none
+      css/style.css
+      scripts/main.js
+      video/Unicef_Alert_03_DOOH_20s.mp4
+    test-dynamic/             Kello/saeae/video/animaatio-demo (ZIP-paketti)
+      index.html              Paeeesivu (kello, saeae, ticker, canvas)
+      css/style.css           Layout, animaatiot, ticker-bar
+      js/app.js               Kellologiikka, saeaedata, ProscreenPlay
+      assets/
+        BoltW 2026_01 6s 600x440 ISS.mp4   Video (EI kaeytoessae, ks. kohta 11)
+  .github/workflows/
+    deploy.yml                GitHub Pages deploy + version stamp
+
+
+3. ARKKITEHTUURI
+----------------
+- Yksi HTML-tiedosto (index.html): kaikki CSS ja JavaScript inline
+- Ei npm, ei build-tyoekaluja, ei frameworkeja
+- Ainoa ulkoinen riippuvuus: lib/hls.min.js (paikallinen kopio)
+- BrightSign Chromium -yhteensopiva: ES5-tyylinen JS, ei kokeellisia APIja
+- Iframe-slidet luodaan dynaamisesti aktivoinnissa ja tuhotaan poistuttaessa
+  (muistinhallinta LS424:n rajoitteiden vuoksi)
+
+
+4. PLAYLIST-KONFIGURAATIO
+-------------------------
+10 slidea, konfiguroitu PLAYLIST-taulukossa (index.html rivi 171):
+
+ #  Tyyppi             Nimi                        Laehde                                    Kesto
+ 1  image              Testikuva (JPG)             test-image.jpg                            6s
+ 2  iframe             Asiakkaan ZIP 2             assets/customer-zip-2/index.html          15s
+ 3  video              Testivideo (MP4)            test-video.mp4                            6s
+ 4  iframe             ZIP PACKAGE TEST            assets/test-dynamic/index.html             15s
+ 5  iframe             Web Redirect - Mediapocket  ksml.cdn.mediapocket.fi/...               10s
+ 6  iframe             Asiakkaan ZIP 1             assets/customer-zip-1/index.html          15s
+ 7  canvas             Vaerigadi                   (inline render-funktio)                   6s
+ 8  canvas             Kontrasti                   (inline render-funktio)                   6s
+ 9  canvas-animation   Animaatio 1                 (inline render-funktio)                   6s
+10  canvas-animation   Animaatio 2                 (inline render-funktio)                   6s
+
+Oletuskesto: 6s (SLIDE_DURATION). Iframe-slideilla per-slide duration.
+Siirtymae: 0.6s CSS opacity fade.
+
+
+5. TUETUT SLIDE-TYYPIT
+-----------------------
+image             Kuva (JPG/PNG). Fallback-canvas jos lataus epaeonnistuu.
+video             MP4/HLS. Tukee .m3u8-striimeja hls.js:n kautta.
+                  Pysaeytetaeaen kun slide ei aktiivinen.
+canvas            Staattinen canvas-piirros (render-funktio).
+canvas-animation  Animoitu canvas (requestAnimationFrame).
+                  Animaatio pysaeytetaeaen kun slide ei naekyvillae.
+iframe            Ulkoinen HTML5-sisaeltoe. Iframe luodaan aktivoinnissa,
+                  tuhotaan deaktivoinnissa. ProscreenPlay()-callback
+                  kutsutaan ladattaessa (same-origin).
+
+
+6. GRACEFUL UPDATE -MEKANISMI
+-----------------------------
+Estaeae violetin ruudun ja osittaisen paeivityksen ongelmat.
+
+VERSION-tunniste:
+  - Koodissa: var VERSION = '__BUILD_TIMESTAMP__';
+  - CI korvaa deployn yhteydessae muotoon YYYYMMDD-HHMMSS
+  - Paikallisessa kehityksessae jaeae placeholderiksi (ei triggeroeidy)
+
+Cache-busting (bustCache-funktio):
+  - Kaikki paikalliset resurssit (kuvat, videot, iframet) saavat
+    URL-parametrin ?_v=<VERSION>
+  - Ulkoisiin URLeihin ei kosketa
+
+Paeivitystarkistus (2 min vaeelin):
+  1. Haetaan oma index.html fetch:llae (cache: no-store)
+  2. Poimitaan VERSION regex:llae vastauksesta
+  3. Jos eri kuin nykyinen -> prepareUpdate()
+  4. XHR-fallback jos fetch ei tuettu (BrightSign)
+
+Preload piilotetussa iframessa:
+  1. Luodaan naekymaetoen iframe (?noupdate=true)
+  2. Iframe lataa koko uuden version + triggeroeie resurssien latauksen
+  3. noupdate=true estaeae rekursiivisen paeivitystarkistuksen
+
+Vaihto slidejen vaelissae:
+  1. nextSlide() tarkistaa pendingUpdate-lipun
+  2. Jos paiv. odottaa: fade-out 0.8s -> window.location.href cache-bustilla
+  3. Turvamekanismi: 2 min timeout pakottaa vaihdon
+  4. Katsoja naekkee vain tumman taustan slidejen vaelissae
+
+
+7. CUSTOMER ZIP -SISAELTOET
+---------------------------
+customer-zip-1 (Unicef Alert):
+  - Aktiivinen, video toistuu normaalisti
+  - ProscreenPlay() ja BroadSignPlay() callbackit
+  - 20s Unicef-haelytysmainos
+
+customer-zip-2 (Unicef Alert, kopio):
+  - Video piilotettu (visibility:hidden, preload:none)
+  - Sama sisaeltoe kuin zip-1, mutta deaktivoitu
+  - Tarkoitus: haelytysvalmius, aktivoidaan tarvittaessa
+
+test-dynamic (demo-paketti):
+  - Kello (reaaliaikainen, suomeksi)
+  - Saeaedata (OpenWeatherMap, API-avain puuttuu -> offline-tila)
+  - Ticker-palkki (scrollaava teksti CSS-animaatiolla)
+  - Canvas-placeholder-animaatio videon tilalla
+  - Pulsating corner -elementit (CSS-animaatio)
+
+
+8. DIAGNOSTIIKKA
+----------------
+Aktivointi: ?debug=true URL-parametri
+
+Naeytettaevae tieto:
+  - Uptime (pv h min s)
+  - Luuppikierrokset (monta kertaa playlist on pyoerinyt)
+  - Aika (fi-FI locale)
+  - Muisti MB (JS heap used/total, jos saatavilla)
+  - Viim. vaihto (kellonaika)
+  - Nykyinen slot (esim. "3/10 - Testivideo")
+  - Versio (VERSION-tunniste)
+  - Paeivitys ("OK" / "Ladataan..." / "Odottaa vaihtoa")
+
+Paeivietetaeaen 1s vaeelin (setInterval).
+Overlay: oikeassa alakulmassa, laepinaekyva musta tausta, vihreae teksti.
+
+
+9. VIRHEENKAESITTELY
+--------------------
+window.onerror:
+  - Naeyttaeae PROSCREEN-fallback-naeytoet 5s
+  - Yrittaeae palauttaa diaesityksen
+  - Jos palautus epaeonnistuu: window.location.reload()
+
+window.onunhandledrejection:
+  - Estaeae Promise-virheiden kuplimisen
+  - Naeyttaeae fallbackin 5s
+
+Auto-reload (klo 03:00):
+  - Vain jos uptime > 4h (estaeae looppi)
+  - Graceful fade-out -> cache-bustattu reload
+  - Tarkistetaan 30s vaeelin
+
+Slide-fallback:
+  - Jos kuva/video ei lataudu, naeyttaeae canvas-fallbackin
+    (violetti tausta + "Aineisto ei saatavilla" -teksti)
+
+
+10. DEPLOYMENT
+--------------
+GitHub Pages + GitHub Actions.
+
+Workflow (.github/workflows/deploy.yml):
+  1. Checkout
+  2. Configure Pages
+  3. Stamp version: sed korvaa __BUILD_TIMESTAMP__ -> YYYYMMDD-HHMMSS
+  4. Upload artifact (koko repo)
+  5. Deploy to GitHub Pages
+
+Triggerit: push main- tai claude/**-brancheihin, workflow_dispatch.
+URL: https://kaimaan1.github.io/proscreen-ds-test/
+
+Lokaali testaus: python3 -m http.server 8080
+
+
+11. TUNNETUT ONGELMAT
+---------------------
+a) test-dynamic video ei toistu:
+   - assets/test-dynamic/index.html rivi 28: <source> kommentoitu pois
+   - Oikea tiedosto on assets/BoltW 2026_01 6s 600x440 ISS.mp4
+   - Canvas-placeholder-animaatio naekyy sen sijaan
+
+b) customer-zip-2 video piilotettu:
+   - index.html: visibility:hidden, preload:none
+   - Tarkoituksellinen (haelytys deaktivoitu), ei bugi
+
+c) README.md vanhentunut:
+   - Ei mainitse iframe-slideja, customer-ZIPpejae, graceful updatea
+   - Playlist-taulukko ei vastaa nykytilaa (7 slidea vs. 10)
+
+d) Saeaedata ei toimi:
+   - test-dynamic/js/app.js: WEATHER_API_KEY on tyhjae merkkijono
+   - Naeyttaeae "API-avain puuttuu" -viestin
